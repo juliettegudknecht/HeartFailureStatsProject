@@ -1,4 +1,3 @@
-## Testing
 ## Computational Statistics Project
 
 ## import data
@@ -100,6 +99,6 @@ for (i in 1:length(predicted)) {
 
 (accuracy <- (length(which(predicted==test$DEATH_EVENT)) / 59.8) * 100)
 
-# testing - juliette
+
 
 # test 2
