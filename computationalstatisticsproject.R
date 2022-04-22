@@ -6,6 +6,7 @@ library(ggplot2)
 library(bestglm)
 library(MASS)
 library(broom)
+library(rpart)
 
 
 # Import data : ----
@@ -168,7 +169,7 @@ for (i in 1:length(predicted)) {
 
 (accuracy <- (length(which(predicted==test$DEATH_EVENT)) / 59.8) * 100)
 
-# Linear Discriminant Analysis:
+# Linear Discriminant Analysis:----
 
 # a) Use the lda function with default priors to separate the Species using all other variables
 (ldamod = lda(DEATH_EVENT ~ ., data= heartdata))
@@ -183,3 +184,25 @@ qda.fit
 qda.class <- predict(qda.fit)$class
 table(qda.class,heartdata$DEATH_EVENT)
 # Performing Worse than LDA.
+
+# Tree Based Methods: ----
+
+# grow tree
+fit_tree <- rpart(DEATH_EVENT ~ ., method="class", data=heartdata)
+
+fit_tree # display the results 
+plot(fit, uniform=TRUE, main="Classification Tree for Kyphosis")
+text(fit, use.n=TRUE, all=TRUE, cex= 0.7)
+
+# Mis-classification error
+(conf.matrix = table(heartdata$DEATH_EVENT, predict(fit_tree,type="class")))
+sum(diag(conf.matrix))/nrow(heartdata)
+
+## Pruning:----
+fitp = prune(fit_tree, cp = 0.019608)
+printcp(fitp)
+plot(fitp) #plot smaller rpart object
+text(fitp, use.n=TRUE, all=TRUE, cex=.8)
+
+(conf.matrix.prune = table(heartdata$DEATH_EVENT, predict(fitp,type="class")))
+sum(diag(conf.matrix.prune))/nrow(heartdata)
