@@ -168,6 +168,18 @@ for (i in 1:length(predicted)) {
 
 (accuracy <- (length(which(predicted==test$DEATH_EVENT)) / 59.8) * 100)
 
-# Linear Discriminent Analysis:
+# Linear Discriminant Analysis:
 
-# test 2
+# a) Use the lda function with default priors to separate the Species using all other variables
+(ldamod = lda(DEATH_EVENT ~ ., data= heartdata))
+
+# b) Obtain the prediction vs. actual matrix
+predict(ldamod)
+table(Predicted=predict(ldamod)$class, Actual = heartdata$DEATH_EVENT)
+
+# Quadratic Discriminant Analysis:
+qda.fit <- qda(DEATH_EVENT ~ ., data= heartdata)
+qda.fit
+qda.class <- predict(qda.fit)$class
+table(qda.class,heartdata$DEATH_EVENT)
+# Performing Worse than LDA.
