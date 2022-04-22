@@ -1,11 +1,23 @@
 ## Computational Statistics Project
 
-## import data
-heartdata <- read.table("/Users/juliettegudknecht/Downloads/heart_failure_clinical_records_datase.csv", 
+# Loading Libraries: ----
+library(tidyverse)
+library(ggplot2)
+library(bestglm)
+library(MASS)
+library(broom)
+
+
+# Import data : ----
+# heartdata <- read.table("/Users/juliettegudknecht/Downloads/heart_failure_clinical_records_datase.csv", 
+#                         header = TRUE,
+#                         sep = ",")
+
+heartdata <- read.table("/Users/tarunagrawal/Documents/GitHub/datascienceproject/heart_failure_clinical_records_dataset.csv", 
                         header = TRUE,
                         sep = ",")
-
-## clean data
+                        
+# Clean data:----
 head(heartdata)
 dim(heartdata)
 
@@ -14,9 +26,17 @@ sum(is.na(heartdata))
 
 #describe data 
 summary(heartdata)
+str(heartdata)
 
-# explore visualizing the data
-library(ggplot2)
+colnames(heartdata)
+# Making correction in Data Type:----'
+categoricalcolumns <- c("anaemia","smoking","sex","diabetes","DEATH_EVENT","high_blood_pressure")
+for( i in categoricalcolumns){
+heartdata[,i] <- as.factor(heartdata[,i])
+}
+str(heartdata)
+
+# Visualisation : ----
 
 ggplot(heartdata, aes(x=age)) +   
   geom_histogram(color="white", fill="red")
@@ -57,14 +77,63 @@ ggplot(heartdata, aes(x=time)) +
 ggplot(heartdata, aes(x=DEATH_EVENT)) +   
   geom_bar(color="white", fill="red")
 
-# logistic regression
+# Assumptions Checking(Logistic): ----
+## Assumption 1: ----
+# Binary Outcome (DEATH_EVENT)
+
+table(heartdata$DEATH_EVENT)
+
+## Assumption 2: ---- 
+# Linear Relationship between logit function and each continuous predictor: 
+
+# Applying Model:
+model_test <- glm(DEATH_EVENT ~ ., family = binomial, 
+              data = heartdata)
+probabilities <- predict(model_test, type = "response")
+
+data_check <- heartdata %>% select_if(is.numeric) 
+predictors <- colnames(data_check)
+
+# Bind the logit and tidying the data for plot
+mydata <- data_check %>%
+  mutate(logit = log(probabilities/(1-probabilities))) %>%
+  gather(key = "predictors", value = "predictor.value", -logit)
+
+# Plots for checking assumptions:
+ggplot(mydata, aes(logit, predictor.value))+
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_y")
+
+## Assumption 3: ----
+# Influential Value in predictors:
+plot(model_test, which = 4, id.n = 3) # Gives Influential Values based on observations.
+
+model.data <- augment(model_test) %>% 
+  mutate(index = 1:n()) 
+model.data %>% top_n(3, .cooksd)
+
+ggplot(model.data, aes(index, .std.resid)) + 
+  geom_point(aes(color = DEATH_EVENT), alpha = .5) +
+  theme_bw()
+
+model.data %>% 
+  filter(abs(.std.resid) > 3)
+
+# No Influential Measures found.
+
+## Assumption 4: ----
+# Multicollinearity:
+car::vif(model_test)
+
+# Logistic Regression ----
 set.seed(123)
 n = nrow(heartdata)
 split <- sample(1:n, 0.8*n, replace = FALSE)
 training <- heartdata[split,]
 test <- heartdata[-split,]
 
-library(bestglm)
 bs1 <- bestglm(Xy = training, family = binomial, IC = "BIC")
 summary(bs1)
 bs1$BestModels
