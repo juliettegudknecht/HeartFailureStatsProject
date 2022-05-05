@@ -1,0 +1,493 @@
+---
+title: "Computational Statistics - Model Selection"
+author: "Sophie Meichtry, Juliette Gudknecht, Tarun Agrawal"
+date: "4/29/2022"
+output: 
+  html_document:
+    toc: yes
+    number_sections: yes
+    code_folding: hide
+    theme: united
+    highlight: tango
+  word_document:
+    toc: yes
+---
+
+```{r include= FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message = FALSE)
+```
+
+```{r include=FALSE}
+heartdata <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/00519/heart_failure_clinical_records_dataset.csv",
+header = TRUE,
+sep = ",")
+```
+
+```{r include=FALSE, message= FALSE}
+# Loading Libraries: ----
+library(tidyverse)
+library(ggplot2)
+library(bestglm)
+library(MASS)
+library(broom)
+library(rpart)
+library(boot)
+```
+
+# Introduction
+
+This data set was taken from the UCI repository. It contains the medical records of 299 patients who were diagnosed with heart failure. The data was collected during a follow-up period where each patient had 13 clinical features examined. The data was collected by Davide Chicco and Guiseppe Jurman in 2020 for their research paper "Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone". 
+
+The purpose of this project is to predict which features are more statistically significant in regards to death event. We intend to focus on model selection and other different statistical prediction methods. Our results will be detailed below.
+
+The limitations to this data set is that it is relatively small which means that even after finding the best model -- we would run into problems with under fitting.
+
+## Variable Description
+
+Thirteen (13) clinical features:
+- age: age of the patient (years)
+- anaemia: decrease of red blood cells or hemoglobin (boolean)
+- high blood pressure: if the patient has hypertension (boolean)
+- creatinine phosphokinase (CPK): level of the CPK enzyme in the blood (mcg/L)
+- diabetes: if the patient has diabetes (boolean)
+- ejection fraction: percentage of blood leaving the heart at each contraction (percentage)
+- platelets: platelets in the blood (kiloplatelets/mL)
+- sex: woman or man (binary)
+- serum creatinine: level of serum creatinine in the blood (mg/dL)
+- serum sodium: level of serum sodium in the blood (mEq/L)
+- smoking: if the patient smokes or not (boolean)
+- time: follow-up period (days)
+- [target] death event: if the patient deceased during the follow-up period (boolean)
+
+
+# Data Cleaning
+
+```{r}
+head(heartdata)
+```
+
+
+```{r}
+sum(is.na(heartdata))
+```
+
+The data set contains 0 null values
+
+```{r}
+str(heartdata)
+```
+
+The variables anaemaia, smoking, sex, diabetes, high blood pressure and Death event should be categorical. This correction is made in the next block.
+
+```{r}
+# Making correction in Data Type:----'
+categoricalcolumns <- c("anaemia","smoking","sex","diabetes","DEATH_EVENT","high_blood_pressure")
+for( i in categoricalcolumns){
+heartdata[,i] <- as.factor(heartdata[,i])
+}
+str(heartdata) 
+```
+
+The variables are now converted to categorical.
+
+# Descriptive Statistics
+
+```{r}
+
+summary(heartdata)
+
+```
+
+# Data Visualization
+
+```{r}
+library(ggplot2)
+ggplot(heartdata, aes(x=age)) +
+geom_histogram(color="white", fill="red")
+```
+
+This plot shows that the of the sample was between 40 and 80 years old. With the majority of participants being around 60 years old. The distribution of age appears to be normal distribution as visible from the plot.
+
+```{r}
+ggplot(heartdata, aes(x=anaemia)) +
+geom_bar(color="white", fill="red")
+```
+
+More people in the study did not have anaemia, but a good amount still did. We can continue with the analysis based on this data.
+
+
+```{r}
+ggplot(heartdata, aes(x=creatinine_phosphokinase)) +
+geom_histogram(color="white", fill="red")
+```
+
+The majority of people in the study had creatinine phosphokinase levels below 2000, but the range was up to 8000.
+
+```{r}
+ggplot(heartdata, aes(x=diabetes)) +
+geom_bar(color="white", fill="red")
+```
+
+The majority of participants did not have diabetes, but a good amount did. We can continue with the analysis based on this data.
+
+```{r}
+ggplot(heartdata, aes(x=ejection_fraction)) +
+geom_histogram(color="white", fill="red")
+```
+
+The majority of patients were under 55% for their ejection fraction which is the cut off range for risk of heart failure. 
+
+Source: https://www.webmd.com/heart-disease/heart-failure/features/ejection-fraction
+
+```{r}
+ggplot(heartdata, aes(x=high_blood_pressure)) +
+geom_bar(color="white", fill="red")
+```
+
+Most patients did not have high blood pressure. 
+
+```{r}
+ggplot(heartdata, aes(x=platelets)) +
+geom_histogram(color="white", fill="red")
+```
+
+The platelets follow a normal distribution.
+
+```{r}
+ggplot(heartdata, aes(x=serum_creatinine)) +
+geom_histogram(color="white", fill="red")
+```
+
+The serum creatinine distribution is skewed to the left. 1.35 milligrams/dl is the cut off range for poor kidney function in men. A lot of the participants were above this range.
+
+Source: https://www.webmd.com/heart-disease/heart-failure/features/ejection-fraction
+
+```{r}
+ggplot(heartdata, aes(x=serum_sodium)) +
+geom_histogram(color="white", fill="red")
+```
+
+A normal blood sodium level is between 135 and 145 milliequivalents per liter (mEq/L). Most patients were in the normal range.
+
+Source: https://www.mayoclinic.org/diseases-conditions/hyponatremia/symptoms-causes/syc-20373711#:~:text=A%20normal%20blood%20sodium%20level,falls%20below%20135%20mEq%2FL.
+
+```{r}
+ggplot(heartdata, aes(x=sex)) +
+geom_bar(color="white", fill="red")
+```
+
+More patients in the study were male. 
+
+```{r}
+ggplot(heartdata, aes(x=smoking)) +
+geom_bar(color="white", fill="red")
+```
+
+More patients did not smoke compared to smoking.
+
+```{r}
+ggplot(heartdata, aes(x=time)) +
+geom_histogram(color="white", fill="red")
+```
+
+There was no real distribution for time after follow up.
+
+```{r}
+ggplot(heartdata, aes(x=DEATH_EVENT)) +
+geom_bar(color="white", fill="red")
+```
+
+More people survived in the study during the follow up period.
+
+# Model Selection - Logistic Regression
+
+## Checking Assumptions for Logistic Regression
+
+### Assumption 1: Binary Outcome (DEATH_EVENT)
+
+An important assumption of logistic regression is that the outcomes should be binary. This assumption is satisfied.
+
+```{r}
+table(heartdata$DEATH_EVENT)
+```
+
+
+### Assumption 2: Linear Relationship between logit function and each continuous predictor
+
+The relationship between the logit function and each continuous predictor variable should be linear. This assumption also appears to be satisfied.
+
+
+```{r, message = FALSE}
+# Applying Model
+model_test <- glm(DEATH_EVENT ~ ., family = binomial, 
+              data = heartdata)
+probabilities <- predict(model_test, type = "response")
+
+data_check <- heartdata %>% select_if(is.numeric) 
+predictors <- colnames(data_check)
+
+# Bind the logit and tidying the data for plot
+mydata <- data_check %>%
+  mutate(logit = log(probabilities/(1-probabilities))) %>%
+  gather(key = "predictors", value = "predictor.value", -logit)
+
+ggplot(mydata, aes(logit, predictor.value))+
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_y")
+```
+
+
+### Assumption 3: Influential Value in predictors
+
+```{r}
+plot(model_test, which = 4, id.n = 3) # Gives Influential Values based on observations.
+
+model.data <- augment(model_test) %>% 
+  mutate(index = 1:n()) 
+model.data %>% top_n(3, .cooksd)
+
+ggplot(model.data, aes(index, .std.resid)) + 
+  geom_point(aes(color = DEATH_EVENT), alpha = .5) +
+  theme_bw()
+
+model.data %>% 
+  filter(abs(.std.resid) > 3)
+```
+No influential measures were found.
+
+### Assumption 4: Multicollinearity
+
+All the values are less than 4, so multicollinearity assumption hold true, meaning that no multicollinearity exists.
+
+```{r}
+car::vif(model_test)
+```
+
+## Applying Logistic Regression Model
+
+```{r}
+# Splitting into training and testing:
+set.seed(4)
+n = nrow(heartdata)
+split <- sample(1:n, 0.75*n, replace = FALSE)
+training <- heartdata[split,]
+test <- heartdata[-split,]
+
+# Applying Model:
+model_logit <- glm(DEATH_EVENT ~., family = binomial(link = 'logit'), data = training)
+
+# Summary:
+summary(model_logit)
+```
+
+Most statistically significant variables are age, ejection_fraction, and time. time has the lowest p-value which suggests is has a strong association with death event.
+
+
+```{r}
+anova(model_logit, test = "Chisq")
+```
+
+Anova suggests serum_creatinine, in addition to the other 3 variables suggested in the previous part.
+
+## Selcting Model:
+### BIC
+
+```{r}
+bs1 <- bestglm(Xy = training, family = binomial, IC = "BIC")
+summary(bs1)
+bs1
+bs1$BestModels
+bs1$Subsets
+```
+
+The BIC criterion suggested to use 3 variables that are: ejection_fraction, serum_creatinine, time.
+
+### AIC
+
+```{r}
+bs2 <- bestglm(Xy = training, family = binomial, IC = "AIC")
+summary(bs2)
+bs2
+bs2$BestModels
+bs2$Subsets
+```
+The AIC criterion suggested to use 6 variables that are: age, ejection_fraction, serum_creatinine, sex, time, and serum_sodium. It is as expected as AIC is more lenient.
+
+We went ahead with both models and compared the accuracy rates to figure out the better model.
+
+#### Model 1 
+
+```{r}
+#Variables taken from BIC
+
+model1 <- glm(DEATH_EVENT ~ ejection_fraction + serum_creatinine + time, family = binomial, 
+              data = training)
+summary(model1)
+```
+
+#### Accuracy Rate - Model 1
+
+```{r}
+predicted1<-predict(model1, test, type="response")
+for (i in 1:length(predicted1)) {
+  if(predicted1[i]>=0.5){
+    predicted1[i]=1
+  } else
+  {predicted1[i]=0
+  }
+}
+(accuracy <- (length(which(predicted1==test$DEATH_EVENT)) / nrow(test)) * 100)
+```
+
+
+### Model 2
+
+```{r}
+#Variables taken from AIC
+
+model2 <- glm(DEATH_EVENT ~ age + ejection_fraction + serum_creatinine + serum_sodium+ sex + time, family = binomial, 
+              data = training)
+summary(model2)
+```
+
+
+#### Accuracy Rate - Model 2
+
+```{r}
+predicted2<-predict(model2, test, type="response")
+for (i in 1:length(predicted2)) {
+  if(predicted2[i]>=0.5){
+    predicted2[i]=1
+  } else
+  {predicted2[i]=0
+  }
+}
+(accuracy2 <- (length(which(predicted2==test$DEATH_EVENT)) / nrow(test)) * 100)
+```
+
+The accuracy for varibles with AIC is slighlty better than with BIC. We ran Leave One out Cross validation to verify the results.
+
+### Model Performance Metrics
+
+#### Leave One Out Cross-Validation Model 1
+
+```{r}
+loocv1 <- glm(DEATH_EVENT ~ ejection_fraction + serum_creatinine + time, family = binomial, heartdata)
+
+(out1<- cv.glm(heartdata, glmfit = loocv1, K = nrow(heartdata))$delta[1])
+```
+
+#### Leave One Out Cross-Validation Model 2
+
+```{r}
+loocv2 <- glm(DEATH_EVENT ~ age + ejection_fraction + serum_creatinine + serum_sodium+ sex + time, family = binomial, heartdata)
+
+(out2 <- cv.glm(heartdata, glmfit = loocv2, K = nrow(heartdata))$delta[1])
+```
+
+Model 2 has the lower error rate, and better accuracy than Model 1.
+We can conclude from this that age, ejection_fraction, serum_creatinine, serum_sodium, sex, and time could be used as predictor variables for death_event.
+
+# Working with all the varibles to increase prediction power
+
+We also tried other models for prediction, in order to figure out the best one. For this purpose we considered all the variables.
+
+
+## Logistic Regression
+
+```{r}
+
+lr <- glm(DEATH_EVENT ~ ., family = binomial, training)
+predictedlr <-predict(lr, test, type="response")
+
+for (i in 1:length(predictedlr)) {
+  if(predictedlr[i]>=0.5){
+    predictedlr[i]=1
+  } else
+  {predictedlr[i]=0
+  }
+}
+(accuracylr <- (length(which(predictedlr==test$DEATH_EVENT)) / nrow(test)) * 100)
+
+table(Predicted=predictedlr, Actual = test$DEATH_EVENT)
+
+```
+
+
+## Linear Discriminant Analysis
+
+Linear Discriminant Analysis is a method to find a linear combination of features that characterizes or separates two or more classes of objects or events. This method can be used for linear classification or dimension reduction. We have used it for the purpose of classification in this project.
+
+```{r}
+ldamod = lda(DEATH_EVENT ~ ., data= training)
+
+predicted = predict(ldamod, test)
+(confu_lda = table(Predicted=predict(ldamod, test)$class, Actual = test$DEATH_EVENT))
+(accuracylda <- sum(100 * diag(confu_lda)/ nrow(test)))
+
+```
+
+## Quadratic Disciminant Analysis
+
+Quadratic Discriminant Analysis is similar to Linear discriminant analysis but used a quadratic function for classification instead of linear.
+
+```{r}
+qda.fit <- qda(DEATH_EVENT ~ ., data = training)
+qda.class <- predict(qda.fit, test)$class
+(confu_qda = table(Predicted = qda.class, Actual = test$DEATH_EVENT))
+(accuracyqda <- sum(100 * diag(confu_qda)/ nrow(test)))
+```
+
+The QDA is performing better than LDA.
+
+## Tree Based Methods
+
+This is another algorithm used for classification purposes. These algorithms are able to map non linear relationships as well leading to better prediction power than other linear supervised learning models in case of non linear relationships in the data.
+
+```{r}
+# Fitting the tree to training dataset:
+fit <- rpart(DEATH_EVENT ~ ., method="class", data=training)
+printcp(fit) # display the results 
+plot(fit, uniform=TRUE, main="Classification Tree")
+text(fit, use.n=TRUE, all=TRUE, cex= 0.7)
+
+# Accuracy Rate:
+(conf.matrix = table(Actual = test$DEATH_EVENT, Predicted = predict(fit,test,type="class")))
+sum(diag(conf.matrix))/nrow(test) * 100
+```
+### Pruning
+
+```{r}
+# Pruning
+fitp = prune(fit, cp = 0.019608)
+printcp(fitp)
+plot(fitp) #plot smaller rpart object
+text(fitp, use.n=TRUE, all=TRUE, cex=.8)
+(conf.matrix.prune = table(test$DEATH_EVENT, predict(fitp,test, type="class")))
+sum(diag(conf.matrix.prune))/nrow(test) * 100
+```
+
+# Conclusion
+
+After conducting model selection, following conclusions can be made:
+
+1. The most useful predictor variables, as suggested by AIC criteria, are: age, serum_sodium, sex, ejection_fraction, serum_creatinine, and time.
+
+2. The overall accuracy rate for logistic regression with given 6 variables is 84%. This accuracy rate is better than the accuracy rate when all the variables are included, i.e, 81.33%
+
+3. The best predictor models, if all the predictor variables are considered were Linear Disciminant Analysis, and Logistic Regression.
+
+4. The variables used by tree based method for classification, before pruning, were: ejection_fraction, platelets, serum_creatinine, and time, and after pruning were: ejection_fraction, serum_creatinine, and time. 
+
+# Reflection
+
+1. Having more observations would have been better. It would have helped us in being more confident about the accuracy rates, and model selection.
+
+2. Having longer followup period would have made data more reliable.
+
+# Citations
+
+Davide Chicco, Giuseppe Jurman: "Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone". BMC Medical Informatics and Decision Making 20, 16 (2020). [Web Link]
+
